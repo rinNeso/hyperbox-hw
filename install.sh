@@ -19,6 +19,9 @@ install -Dm644 "$R/udev/82-egpu-pin-pm-trigger.rules" /etc/udev/rules.d/82-egpu-
 install -Dm644 /dev/null /etc/udev/rules.d/20-audio-pm.rules
 udevadm control --reload
 
+say "modprobe: keep snd_hda_intel out of runtime PM"
+install -Dm644 "$R/modprobe/hda-egpu-pm.conf" /etc/modprobe.d/hda-egpu-pm.conf
+
 say "eGPU D0 pin service"
 install -Dm755 "$R/bin/egpu-pin-pm"            /usr/local/bin/egpu-pin-pm
 install -Dm644 "$R/systemd/egpu-pin-pm.service" /etc/systemd/system/egpu-pin-pm.service

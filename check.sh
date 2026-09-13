@@ -30,6 +30,8 @@ else
     fail "20-audio-pm.rules mask missing or non-empty -- audio runtime PM may be live"
 fi
 
+same "$R/modprobe/hda-egpu-pm.conf" /etc/modprobe.d/hda-egpu-pm.conf "hda-egpu-pm.conf"
+
 echo "== eGPU power pinning (live state) =="
 for d in 0000:00:03.1 0000:c2:00.0 0000:c3:00.0 0000:c4:00.0 0000:c4:00.1; do
     [[ -e /sys/bus/pci/devices/$d ]] || { warn "$d not present"; continue; }
