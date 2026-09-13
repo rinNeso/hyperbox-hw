@@ -48,6 +48,18 @@ same "$R/pacman/bin/hw-watchlist-check"     /usr/local/bin/hw-watchlist-check   
 same "$R/pacman/hw-watchlist.conf"          /etc/pacman.d/hw-watchlist.conf        "hw-watchlist.conf"
 same "$R/pacman/hooks/00-hw-watchlist.hook" /etc/pacman.d/hooks/00-hw-watchlist.hook "00-hw-watchlist.hook"
 
+echo "== local LLM stack =="
+same "$R/services/ollama-override.conf" /etc/systemd/system/ollama.service.d/override.conf "ollama override"
+same "$R/services/open-webui.service"   "$HOME/.config/systemd/user/open-webui.service"      "open-webui.service"
+if ollama list 2>/dev/null | tail -n +2 | grep -qiE 'cloud|remote'; then
+    fail "a cloud-backed ollama model is present -- this stack is local-only"
+else
+    pass "ollama models are local-only"
+fi
+ext=$(ss -tnp 2>/dev/null | grep open-webui | grep -vcE '127\.0\.0\.1|\[::1\]|192\.168\.')
+[[ ${ext:-0} -eq 0 ]] && pass "open-webui has no external connections" \
+                      || fail "open-webui has $ext external connection(s)"
+
 echo "== package holds =="
 if grep -qE '^\s*IgnorePkg.*\bddcutil\b' /etc/pacman.conf 2>/dev/null; then
     pass "ddcutil pinned via IgnorePkg ($(pacman -Q ddcutil 2>/dev/null))"

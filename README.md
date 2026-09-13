@@ -41,10 +41,11 @@ touches it is a hazard.
 | Path | What it is |
 |---|---|
 | `kernel/cmdline.md` | Boot parameters that keep the eGPU alive, and why each one is there |
-| `udev/` | Rules pinning the eGPU chain out of runtime PM, plus the audio-PM mask |
+| `udev/`, `modprobe/` | Rules pinning the eGPU chain out of runtime PM, the audio-PM mask, and the `snd_hda_intel` module options behind it |
 | `systemd/`, `bin/egpu-pin-pm` | Re-pins the HDA function after `snd_hda_intel` resets it |
 | `bin/egpu-check.sh` | Post-crash triage: did the GPU fall off the bus, and was it this bug? |
 | `pacman/` | Hardware watchlist: blocks or warns on upgrades known to break this machine |
+| `services/` | Local LLM stack — ollama's iGPU/Vulkan override and the open-webui unit, both hardened offline |
 | `desktop/` | Forces the update tray into kitty |
 | `incidents/` | Full writeups of both GPU failures, with the evidence that identified them |
 

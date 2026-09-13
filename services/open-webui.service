@@ -1,0 +1,61 @@
+[Unit]
+Description=Open WebUI — local chat front-end for ollama
+Documentation=https://github.com/open-webui/open-webui
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nate
+ExecStart=/home/nate/.local/bin/open-webui serve
+
+# DATA_DIR deliberately outside the pipx venv: the default lives under
+# site-packages/open_webui/data, which `pipx upgrade open-webui` replaces
+# wholesale — taking the chat history with it.
+Environment=DATA_DIR=/home/nate/.open-webui
+
+# 0.0.0.0 so the phone/tablet can reach it on the LAN. The Open WebUI login
+# is the only thing in front of it; signup is disabled.
+Environment=HOST=0.0.0.0
+Environment=PORT=8080
+
+# WorkingDirectory=/home/nate keeps ~/.webui_secret_key resolving to the same
+# file the manual launches used, so existing logins survive the switch.
+# Default model for new chats. Open WebUI treats this as a PersistentConfig:
+# it is read from the env only when the key is absent from webui.db, after
+# which the DB value wins (currently ui.default_models = qwen3.8:27b, set in
+# the UI on 2026-09-12). Kept here so a rebuilt DB comes back with the right
+# default instead of none.
+Environment=DEFAULT_MODELS=qwen3.8:27b
+
+# No phoning home. The point of running this locally is that nothing leaves
+# the box; Claude is the cloud model. OFFLINE_MODE is safe here because the RAG
+# embedding model (all-MiniLM-L6-v2) is already in ~/.cache/huggingface -- flip
+# it off temporarily if you ever need to pull a different embedding model.
+Environment=OFFLINE_MODE=True
+Environment=ENABLE_VERSION_UPDATE_CHECK=False
+Environment=ANONYMIZED_TELEMETRY=False
+Environment=DO_NOT_TRACK=True
+Environment=SCARF_NO_ANALYTICS=True
+
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/nate
+
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/nate/.open-webui
+ReadWritePaths=/home/nate/.webui_secret_key
+ReadWritePaths=/home/nate/.cache/huggingface
+# Open WebUI re-copies its branding assets (favicon, splash, logo) into the
+# frontend static dir on every start. Harmless, but it logs 19 errors a boot
+# if the path is read-only. Data no longer lives under the venv, so granting
+# write here costs nothing.
+ReadWritePaths=/home/nate/.local/share/pipx/venvs/open-webui/lib/python3.12/site-packages/open_webui/static
+
+[Install]
+WantedBy=default.target

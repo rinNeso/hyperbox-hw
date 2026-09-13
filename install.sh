@@ -28,6 +28,10 @@ install -Dm644 "$R/systemd/egpu-pin-pm.service" /etc/systemd/system/egpu-pin-pm.
 systemctl daemon-reload
 systemctl enable --now egpu-pin-pm.service
 
+say "ollama iGPU/Vulkan override"
+install -Dm644 "$R/services/ollama-override.conf" /etc/systemd/system/ollama.service.d/override.conf
+systemctl daemon-reload
+
 say "diagnostics"
 install -Dm755 "$R/bin/egpu-check.sh" /usr/local/bin/egpu-check
 
@@ -41,6 +45,11 @@ if [[ -n $USER_NAME && -d $USER_HOME ]]; then
     install -Dm644 -o "$USER_NAME" -g "$USER_NAME" \
         "$R/desktop/arch-update.desktop" \
         "$USER_HOME/.local/share/applications/arch-update.desktop"
+
+    say "open-webui user unit (user: $USER_NAME)"
+    install -Dm644 -o "$USER_NAME" -g "$USER_NAME" \
+        "$R/services/open-webui.service" \
+        "$USER_HOME/.config/systemd/user/open-webui.service"
 fi
 
 cat <<'NOTE'
