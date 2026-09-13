@@ -1,0 +1,15 @@
+# Hardware-critical package guard for hyperBox (eGPU / amdgpu display stack).
+# Complements cachy-update's Arch news check with machine-specific knowledge.
+# Watchlist: /etc/pacman.d/hw-watchlist.conf     Disable: touch /etc/pacman.d/hw-watchlist.off
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = Checking hyperBox hardware watchlist...
+When = PreTransaction
+Exec = /usr/local/bin/hw-watchlist-check
+NeedsTargets
+AbortOnFail

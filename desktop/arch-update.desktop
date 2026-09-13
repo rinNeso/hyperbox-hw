@@ -1,0 +1,11 @@
+[Desktop Entry]
+# User override of /usr/share/applications/arch-update.desktop
+# Forces kitty instead of relying on the desktop-entry Terminal=true handler.
+# --hold keeps the window open after the update exits so warnings stay readable.
+Name=Cachy-Update
+Comment=An interactive update notifier & applier for CachyOS
+Icon=cachy-update-blue
+Type=Application
+Terminal=false
+Exec=kitty --hold -T "Cachy-Update" -e arch-update
+Categories=Utility

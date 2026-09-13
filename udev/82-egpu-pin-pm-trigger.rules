@@ -1,0 +1,2 @@
+# Re-run the pin service when the eGPU's HDA function binds (covers hotplug).
+ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x1002", ATTR{device}=="0xab40", TAG+="systemd", ENV{SYSTEMD_WANTS}+="egpu-pin-pm.service"

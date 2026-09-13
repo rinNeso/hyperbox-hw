@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# hw-watchlist-check -- pacman PreTransaction guard for hardware-critical packages.
+#
+# Reads pacman's target list on stdin (hook uses NeedsTargets), consults
+# /etc/pacman.d/hw-watchlist.conf, and either warns or stops the transaction
+# so a known-hostile upgrade can't land unnoticed.
+#
+#   severity "warn"  -> print a note, continue
+#   severity "block" -> print a note, ask on /dev/tty, abort unless confirmed
+#
+# Escape hatches:  touch /etc/pacman.d/hw-watchlist.off   (disables entirely)
+#                  hw-watchlist-check --list              (show the watchlist)
+
+set -uo pipefail
+
+CONF=${HW_WATCHLIST_CONF:-/etc/pacman.d/hw-watchlist.conf}
+OFF=${HW_WATCHLIST_OFF:-/etc/pacman.d/hw-watchlist.off}
+
+if [[ -e /dev/tty ]]; then
+    bold=$'\e[1m'; red=$'\e[1;31m'; yel=$'\e[1;33m'; dim=$'\e[2m'; rst=$'\e[0m'
+else
+    bold=''; red=''; yel=''; dim=''; rst=''
+fi
+
+[[ -e $OFF ]] && exit 0
+[[ -r $CONF ]] || exit 0
+
+declare -A SEV NOTE
+while IFS='|' read -r sev pkg note || [[ -n ${sev:-} ]]; do
+    sev=${sev//[[:space:]]/}; pkg=${pkg//[[:space:]]/}
+    [[ -z $sev || $sev == \#* || -z $pkg ]] && continue
+    SEV[$pkg]=$sev
+    NOTE[$pkg]=${note## }
+done < "$CONF"
+
+if [[ ${1:-} == --list ]]; then
+    printf '%s\n' "${bold}hardware watchlist${rst} ${dim}($CONF)${rst}"
+    for p in $(printf '%s\n' "${!SEV[@]}" | sort); do
+        c=$yel; [[ ${SEV[$p]} == block ]] && c=$red
+        printf '  %b%-5s%b  %-22s %s\n' "$c" "${SEV[$p]}" "$rst" "$p" "${NOTE[$p]}"
+    done
+    exit 0
+fi
+
+blocks=(); warns=()
+while read -r line; do
+    pkg=${line%%[[:space:]]*}
+    [[ -z $pkg ]] && continue
+    case ${SEV[$pkg]:-} in
+        block) blocks+=("$pkg") ;;
+        warn)  warns+=("$pkg") ;;
+    esac
+done
+
+(( ${#blocks[@]} + ${#warns[@]} )) || exit 0
+
+{
+    echo
+    echo "${bold}== hyperBox hardware watchlist ==${rst}"
+    for p in ${warns[@]+"${warns[@]}"};  do
+        echo "  ${yel}warn ${rst} ${bold}$p${rst}"; echo "         ${NOTE[$p]}"
+    done
+    for p in ${blocks[@]+"${blocks[@]}"}; do
+        echo "  ${red}BLOCK${rst} ${bold}$p${rst}"; echo "         ${NOTE[$p]}"
+    done
+    echo
+} >&2
+
+(( ${#blocks[@]} )) || exit 0
+
+if [[ ! -e /dev/tty ]]; then
+    echo "${red}Aborted:${rst} blocked package(s) and no terminal to confirm on." >&2
+    echo "${dim}Override: touch $OFF  (remove it afterwards)${rst}" >&2
+    exit 1
+fi
+
+printf '%s' "${bold}Proceed with the blocked package(s)? [y/N] ${rst}" >&2
+read -r ans < /dev/tty || ans=n
+echo >&2
+case ${ans,,} in
+    y|yes) echo "${dim}Continuing at your request.${rst}" >&2; exit 0 ;;
+    *)     echo "${red}Transaction aborted by hardware watchlist.${rst}" >&2; exit 1 ;;
+esac

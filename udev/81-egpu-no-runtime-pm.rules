@@ -1,0 +1,11 @@
+# Keep the OCuLink eGPU chain in D0: a failed D3hot->D0 resume drops the device
+# off the PCIe bus and requires a hard reboot. See hda-egpu-pm.conf.
+#
+# 1002:7550 Navi 48 (RX 9070)          1002:ab40 its HDMI audio function
+# 1002:1478 Navi upstream switch port  1002:1479 downstream switch port
+# 0000:00:03.1 is the M.2 root port the OCuLink adapter sits in (fixed address).
+ACTION=="add|bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x1002", ATTR{device}=="0x7550", ATTR{power/control}="on", ATTR{d3cold_allowed}="0"
+ACTION=="add|bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x1002", ATTR{device}=="0xab40", ATTR{power/control}="on", ATTR{d3cold_allowed}="0"
+ACTION=="add|bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x1002", ATTR{device}=="0x1478", ATTR{power/control}="on", ATTR{d3cold_allowed}="0"
+ACTION=="add|bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x1002", ATTR{device}=="0x1479", ATTR{power/control}="on", ATTR{d3cold_allowed}="0"
+ACTION=="add|bind", SUBSYSTEM=="pci", KERNEL=="0000:00:03.1", ATTR{power/control}="on", ATTR{d3cold_allowed}="0"

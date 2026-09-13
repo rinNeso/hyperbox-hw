@@ -1,0 +1,11 @@
+[Unit]
+Description=Pin OCuLink eGPU chain out of PCIe runtime power management
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/egpu-pin-pm
+
+[Install]
+WantedBy=multi-user.target

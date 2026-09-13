@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pin the OCuLink eGPU PCIe chain into D0.
+#
+# The udev rule sets power/control=on at add/bind, but snd_hda_intel calls
+# pm_runtime_allow() after its bind uevent is processed, resetting the HDA
+# function (1002:ab40) to "auto". This runs after the driver has settled.
+# A failed D3hot->D0 resume on that function drops the whole endpoint off the
+# PCIe bus and needs a hard power cycle. 2026-08-27.
+
+pin() {
+    [ -e "$1/power/control" ] && echo on > "$1/power/control" 2>/dev/null
+    [ -e "$1/d3cold_allowed" ] && echo 0 > "$1/d3cold_allowed" 2>/dev/null
+}
+
+for d in /sys/bus/pci/devices/*; do
+    v=$(cat "$d/vendor" 2>/dev/null)
+    p=$(cat "$d/device" 2>/dev/null)
+    case "$v:$p" in
+        # Navi 48 GPU | its HDA function | Navi upstream/downstream switch ports
+        0x1002:0x7550|0x1002:0xab40|0x1002:0x1478|0x1002:0x1479) pin "$d" ;;
+    esac
+done
+
+# M.2 root port the OCuLink adapter sits in (fixed address)
+pin /sys/bus/pci/devices/0000:00:03.1
+
+exit 0
