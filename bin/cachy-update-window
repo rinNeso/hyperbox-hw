@@ -1,0 +1,18 @@
+#!/bin/sh
+# Run the updater in a terminal window and keep the window open afterwards so
+# post-upgrade warnings (the hardware watchlist, hw-verify, pacman's own .pacnew
+# notices) stay readable.
+#
+# Deliberately NOT `kitty --hold`. kitty's --hold means "remain open AT A SHELL
+# PROMPT", i.e. it spawns an interactive $SHELL when the child exits. $SHELL is
+# zsh in the Plasma session here, whose startup sources cachyos-config.zsh ->
+# powerlevel10k; with no ~/.p10k.zsh that launches p10k's configuration wizard
+# on top of the finished update. See incidents/2026-09-15-p10k-wizard.md
+#
+# `read` on a plain /bin/sh keeps the window open with no shell startup at all.
+
+arch-update "$@"
+status=$?
+printf '\n\033[2m-- finished (exit %s) -- press Enter to close --\033[0m' "$status"
+read -r _
+exit "$status"

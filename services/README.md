@@ -15,6 +15,7 @@ RX 9070 XT eGPU:
 | `OLLAMA_IGPU_ENABLE=1` | allow the integrated GPU as a target at all |
 | `GGML_VK_VISIBLE_DEVICES=1` | device 1 = the iGPU; keeps inference off the eGPU |
 | `OLLAMA_KEEP_ALIVE=-1` | never unload a model — deliberate, 125 GB of RAM |
+| `OLLAMA_HOST=0.0.0.0:11434` | LAN listener for the Discord `/summary` bot on HeilandBay. Ollama has no auth, so a ufw rule limiting 11434 to `192.168.0.69` is the only gate — `check.sh` asserts it |
 
 `KEEP_ALIVE=-1` means a loaded model stays resident permanently. That is the
 intended behaviour on this box; on a machine with less RAM, change it to a

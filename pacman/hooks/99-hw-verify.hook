@@ -1,0 +1,17 @@
+# Post-upgrade verification for hyperBox's hardware-critical packages.
+# The PreTransaction half (00-hw-watchlist.hook) is advisory only; this is
+# where the actual checking happens, because every risk here is "did the
+# upgrade quietly undo a mitigation" -- only answerable after it lands.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = limine
+Target = cachyos-settings
+Target = ddcutil
+
+[Action]
+Description = Verifying hyperBox hardware mitigations...
+When = PostTransaction
+Exec = /usr/local/bin/hw-verify
+NeedsTargets

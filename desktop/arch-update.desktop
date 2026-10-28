@@ -1,11 +1,16 @@
 [Desktop Entry]
-# User override of /usr/share/applications/arch-update.desktop
-# Forces kitty instead of relying on the desktop-entry Terminal=true handler.
-# --hold keeps the window open after the update exits so warnings stay readable.
+# User override of /usr/share/applications/arch-update.desktop, which is
+# Terminal=true + Exec=arch-update and so lands in KDE's default terminal
+# (konsole). This forces kitty.
+#
+# Exec runs a wrapper rather than `kitty --hold -e arch-update`: --hold keeps
+# the window open by starting an interactive $SHELL, which on this machine
+# means zsh -> powerlevel10k -> the p10k configuration wizard, every time an
+# update finishes. The wrapper waits on `read` instead, with no shell startup.
 Name=Cachy-Update
 Comment=An interactive update notifier & applier for CachyOS
 Icon=cachy-update-blue
 Type=Application
 Terminal=false
-Exec=kitty --hold -T "Cachy-Update" -e arch-update
+Exec=kitty -T "Cachy-Update" -e /usr/local/bin/cachy-update-window
 Categories=Utility

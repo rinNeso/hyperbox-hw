@@ -1,5 +1,11 @@
-# Hardware-critical package guard for hyperBox (eGPU / amdgpu display stack).
+# Hardware-critical package advisory for hyperBox (eGPU / amdgpu display stack).
 # Complements cachy-update's Arch news check with machine-specific knowledge.
+#
+# ADVISORY ONLY -- no AbortOnFail. A PreTransaction hook cannot drop a single
+# package from a transaction; a non-zero exit kills all of them. See
+# incidents/2026-09-15-watchlist-blocked-everything.md. The real checks run
+# PostTransaction via 99-hw-verify.hook.
+#
 # Watchlist: /etc/pacman.d/hw-watchlist.conf     Disable: touch /etc/pacman.d/hw-watchlist.off
 [Trigger]
 Operation = Install
@@ -12,4 +18,3 @@ Description = Checking hyperBox hardware watchlist...
 When = PreTransaction
 Exec = /usr/local/bin/hw-watchlist-check
 NeedsTargets
-AbortOnFail

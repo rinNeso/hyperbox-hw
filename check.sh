@@ -43,10 +43,52 @@ done
 systemctl is-active --quiet egpu-pin-pm.service && pass "egpu-pin-pm.service active" \
                                                 || fail "egpu-pin-pm.service not active"
 
+echo "== journal retention =="
+same "$R/systemd/journald-size.conf" /etc/systemd/journald.conf.d/00-journal-size.conf "journald-size.conf"
+cap=$(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[MG]' | tail -1)
+oldest=$(journalctl --list-boots 2>/dev/null | awk 'NR==2{print $3}')
+[[ -n $oldest ]] && warn "journal reaches back to $oldest (using $cap)"
+
+echo "== update tray (kitty override) =="
+tray_desktop="$HOME/.local/share/applications/arch-update.desktop"
+same "$R/desktop/arch-update.desktop" "$tray_desktop" "arch-update.desktop"
+# The override only takes effect for a tray started AFTER it was written --
+# the applet reads the desktop file once at startup. A stale tray silently
+# keeps using konsole.
+# kitty --hold reopens at an interactive $SHELL (zsh -> p10k wizard here).
+# The launcher must use the wrapper, never --hold.
+if grep -q -- '--hold' "$tray_desktop" 2>/dev/null; then
+    fail "arch-update.desktop uses kitty --hold -- it will drop to a zsh prompt and run the p10k wizard"
+elif [[ -x /usr/local/bin/cachy-update-window ]]; then
+    pass "update window uses the no-shell wrapper"
+else
+    warn "cachy-update-window wrapper not installed"
+fi
+
+tray_pid=$(pgrep -f '/arch-update-tray' | head -1)
+if [[ -z $tray_pid ]]; then
+    warn "no arch-update tray running"
+elif [[ ! -e $tray_desktop ]]; then
+    :  # already reported by same() above
+elif [[ $(stat -c %Y "/proc/$tray_pid") -ge $(stat -c %Y "$tray_desktop") ]]; then
+    pass "tray (pid $tray_pid) started after the override"
+else
+    fail "tray (pid $tray_pid) predates the override -- still launching konsole; pkill -f /arch-update-tray"
+fi
+
 echo "== pacman watchlist =="
 same "$R/pacman/bin/hw-watchlist-check"     /usr/local/bin/hw-watchlist-check      "hw-watchlist-check"
+same "$R/pacman/bin/hw-verify"              /usr/local/bin/hw-verify               "hw-verify"
 same "$R/pacman/hw-watchlist.conf"          /etc/pacman.d/hw-watchlist.conf        "hw-watchlist.conf"
 same "$R/pacman/hooks/00-hw-watchlist.hook" /etc/pacman.d/hooks/00-hw-watchlist.hook "00-hw-watchlist.hook"
+same "$R/pacman/hooks/99-hw-verify.hook"    /etc/pacman.d/hooks/99-hw-verify.hook   "99-hw-verify.hook"
+# A PreTransaction hook cannot skip one package -- AbortOnFail there kills the
+# whole transaction. It must stay out of 00-hw-watchlist.hook.
+if grep -q '^AbortOnFail' /etc/pacman.d/hooks/00-hw-watchlist.hook 2>/dev/null; then
+    fail "00-hw-watchlist.hook has AbortOnFail -- it will abort entire transactions"
+else
+    pass "watchlist pre-hook is advisory (no AbortOnFail)"
+fi
 
 echo "== local LLM stack =="
 same "$R/services/ollama-override.conf" /etc/systemd/system/ollama.service.d/override.conf "ollama override"
@@ -59,6 +101,16 @@ fi
 ext=$(ss -tnp 2>/dev/null | grep open-webui | grep -vcE '127\.0\.0\.1|\[::1\]|192\.168\.')
 [[ ${ext:-0} -eq 0 ]] && pass "open-webui has no external connections" \
                       || fail "open-webui has $ext external connection(s)"
+# ollama listens on the LAN for the HeilandBay /summary bot and has no auth, so
+# ufw is the only gate: 11434 must be open to 192.168.0.69 and nothing wider.
+o=$(grep -E '^### tuple ### allow (tcp|any) 11434 ' /etc/ufw/user.rules 2>/dev/null)
+if [[ -z $o ]]; then
+    fail "no ufw rule for ollama :11434 -- HeilandBay's summary bot can't reach it"
+elif grep -vqE ' 192\.168\.0\.69 in' <<<"$o"; then
+    fail "ufw opens ollama :11434 wider than HeilandBay (192.168.0.69)"
+else
+    pass "ollama :11434 reachable from HeilandBay only"
+fi
 
 echo "== package holds =="
 if grep -qE '^\s*IgnorePkg.*\bddcutil\b' /etc/pacman.conf 2>/dev/null; then

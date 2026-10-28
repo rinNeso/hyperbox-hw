@@ -31,14 +31,26 @@ systemctl enable --now egpu-pin-pm.service
 say "ollama iGPU/Vulkan override"
 install -Dm644 "$R/services/ollama-override.conf" /etc/systemd/system/ollama.service.d/override.conf
 systemctl daemon-reload
+# The override binds ollama to the LAN for HeilandBay's /summary bot. Ollama has
+# no auth, so this rule is the only thing keeping the rest of the LAN out.
+ufw allow proto tcp from 192.168.0.69 to any port 11434 comment 'ollama for HeilandBay summary bot'
+
+say "journal retention"
+# cachyos-settings caps the journal at 50M (~1 day). Same basename in /etc wins.
+install -Dm644 "$R/systemd/journald-size.conf" /etc/systemd/journald.conf.d/00-journal-size.conf
+systemctl restart systemd-journald
 
 say "diagnostics"
-install -Dm755 "$R/bin/egpu-check.sh" /usr/local/bin/egpu-check
+install -Dm755 "$R/bin/egpu-check.sh"        /usr/local/bin/egpu-check
+install -Dm755 "$R/bin/hdmi-capture.sh"      /usr/local/bin/hdmi-capture
+install -Dm755 "$R/bin/cachy-update-window"  /usr/local/bin/cachy-update-window
 
 say "pacman hardware watchlist"
-install -Dm755 "$R/pacman/bin/hw-watchlist-check"    /usr/local/bin/hw-watchlist-check
-install -Dm644 "$R/pacman/hw-watchlist.conf"         /etc/pacman.d/hw-watchlist.conf
+install -Dm755 "$R/pacman/bin/hw-watchlist-check"     /usr/local/bin/hw-watchlist-check
+install -Dm755 "$R/pacman/bin/hw-verify"              /usr/local/bin/hw-verify
+install -Dm644 "$R/pacman/hw-watchlist.conf"          /etc/pacman.d/hw-watchlist.conf
 install -Dm644 "$R/pacman/hooks/00-hw-watchlist.hook" /etc/pacman.d/hooks/00-hw-watchlist.hook
+install -Dm644 "$R/pacman/hooks/99-hw-verify.hook"    /etc/pacman.d/hooks/99-hw-verify.hook
 
 if [[ -n $USER_NAME && -d $USER_HOME ]]; then
     say "kitty override for the update tray (user: $USER_NAME)"
@@ -50,6 +62,34 @@ if [[ -n $USER_NAME && -d $USER_HOME ]]; then
     install -Dm644 -o "$USER_NAME" -g "$USER_NAME" \
         "$R/services/open-webui.service" \
         "$USER_HOME/.config/systemd/user/open-webui.service"
+
+    # The tray resolves arch-update.desktop ONCE at startup and caches it, so a
+    # tray that was already running keeps launching konsole no matter what the
+    # file says. Installing the override without this is a silent no-op for the
+    # rest of the session -- that is exactly how it went unnoticed for 2 days.
+    say "restart the update tray so it picks up the kitty override"
+    pkill -u "$USER_NAME" -f '/arch-update-tray' || true
+    sleep 1
+    # The tray is a GUI client: without WAYLAND_DISPLAY it cannot reach the
+    # compositor and exits immediately, leaving no tray until next login.
+    # Take the whole display env from the running session rather than guessing.
+    _uid=$(id -u "$USER_NAME")
+    _sess=$(pgrep -u "$USER_NAME" -x plasmashell | head -1)
+    if [[ -n $_sess ]]; then
+        _wl=$(tr '\0' '\n' < "/proc/$_sess/environ" | grep -m1 '^WAYLAND_DISPLAY=' || echo WAYLAND_DISPLAY=wayland-0)
+        _dp=$(tr '\0' '\n' < "/proc/$_sess/environ" | grep -m1 '^DISPLAY=' || true)
+        runuser -u "$USER_NAME" -- env \
+            XDG_RUNTIME_DIR="/run/user/$_uid" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$_uid/bus" \
+            "$_wl" ${_dp:+"$_dp"} \
+            setsid arch-update --tray >/dev/null 2>&1 &
+        sleep 2
+        pgrep -u "$USER_NAME" -f '/arch-update-tray' >/dev/null \
+            && echo "   tray restarted" \
+            || echo "   WARNING: tray did not come back -- start it from the session"
+    else
+        echo "   no graphical session found; tray will start at next login"
+    fi
 fi
 
 cat <<'NOTE'

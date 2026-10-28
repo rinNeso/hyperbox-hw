@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# hw-verify -- pacman PostTransaction check for hardware-critical packages.
+#
+# Runs AFTER the transaction, on the packages that actually landed. This is
+# where the real checking belongs: every risk on this machine's watchlist is
+# "did the upgrade quietly undo a mitigation", which is only answerable once
+# the upgrade has happened.
+#
+# Exits 0 always -- the transaction is already committed; failing here would
+# only make pacman look broken. It reports loudly instead.
+#
+#   hw-verify --all    run every check regardless of what was upgraded
+
+set -uo pipefail
+
+CONF=${HW_WATCHLIST_CONF:-/etc/pacman.d/hw-watchlist.conf}
+OFF=${HW_WATCHLIST_OFF:-/etc/pacman.d/hw-watchlist.off}
+[[ -e $OFF ]] && exit 0
+
+# Paths are injectable so the failure branches can actually be tested.
+LIMINE_DEFAULT=${LIMINE_DEFAULT:-/etc/default/limine}
+UDEV_LIB=${UDEV_LIB:-/usr/lib/udev/rules.d}
+UDEV_ETC=${UDEV_ETC:-/etc/udev/rules.d}
+PROC_CMDLINE=${PROC_CMDLINE:-/proc/cmdline}
+
+bold=$'\e[1m'; red=$'\e[1;31m'; grn=$'\e[1;32m'; yel=$'\e[1;33m'; dim=$'\e[2m'; rst=$'\e[0m'
+findings=()
+note()  { findings+=("  ${yel}note${rst}  $*"); }
+bad()   { findings+=("  ${red}FAIL${rst}  $*"); }
+good()  { findings+=("  ${grn}ok${rst}    $*"); }
+
+# --- limine: the eGPU mitigations live in its KERNEL_CMDLINE -----------------
+check_limine() {
+    local f=$LIMINE_DEFAULT missing=()
+    for p in amdgpu.runpm=0 pcie_port_pm=off \
+             snd_hda_intel.power_save=0 snd_hda_intel.power_save_controller=N; do
+        grep -qF -- "$p" "$f" 2>/dev/null || missing+=("$p")
+    done
+    if (( ${#missing[@]} )); then
+        bad "limine: $f is missing ${missing[*]}"
+        bad "      -> restore them, then: sudo limine-update"
+    else
+        good "limine: all four eGPU params still in $f"
+    fi
+    if [[ -e $f.pacnew ]]; then
+        bad "limine: $f.pacnew exists -- merge it WITHOUT dropping KERNEL_CMDLINE"
+    fi
+    # The booted cmdline is the previous boot's; only informational here.
+    local live_missing=()
+    for p in amdgpu.runpm=0 pcie_port_pm=off; do
+        grep -qw -- "$p" "$PROC_CMDLINE" || live_missing+=("$p")
+    done
+    (( ${#live_missing[@]} )) && note "limine: running kernel lacks ${live_missing[*]} (expected until you reboot)"
+}
+
+# --- cachyos-settings: may reintroduce audio runtime PM under a new name -----
+check_cachyos_settings() {
+    local unmasked=()
+    for f in "$UDEV_LIB"/*.rules; do
+        [[ -e $f ]] || continue
+        grep -qE 'power_save|power/control' "$f" 2>/dev/null || continue
+        # Match the filename OR the content: a rule can say SUBSYSTEM=="sound"
+        # and never contain the string "snd" anywhere. Missing that is how the
+        # rule this check exists to catch would sail straight through.
+        grep -qiE 'snd|sound|audio|hda' <<<"$(basename "$f")$(cat "$f")" || continue
+        local base mask; base=$(basename "$f"); mask=$UDEV_ETC/$base
+        if [[ -e $mask && ! -s $mask ]]; then
+            good "cachyos-settings: $base is masked"
+        else
+            unmasked+=("$base")
+        fi
+    done
+    if (( ${#unmasked[@]} )); then
+        bad "cachyos-settings: UNMASKED audio PM rule(s): ${unmasked[*]}"
+        bad "      -> sudo install -Dm644 /dev/null /etc/udev/rules.d/<name>  then reboot"
+    fi
+}
+
+# --- ddcutil: 3.0.0 wedges amdgpu; 3.0.1 is the fix -------------------------
+check_ddcutil() {
+    local v; v=$(pacman -Q ddcutil 2>/dev/null | awk '{print $2}')
+    [[ -z $v ]] && return
+    case $v in
+        3.0.0*) bad "ddcutil $v installed -- this is the version that killed three boots. Downgrade." ;;
+        2.*)    note "ddcutil $v (pinned). 3.0.1+ carries the fix; the pin can be lifted." ;;
+        *)      good "ddcutil $v" ;;
+    esac
+}
+
+targets=()
+if [[ ${1:-} == --all ]]; then
+    targets=(limine cachyos-settings ddcutil)
+else
+    while read -r line; do
+        pkg=${line%%[[:space:]]*}
+        [[ -n $pkg ]] && targets+=("$pkg")
+    done
+fi
+
+ran=0
+for p in ${targets[@]+"${targets[@]}"}; do
+    case $p in
+        limine)           check_limine;           ran=1 ;;
+        cachyos-settings) check_cachyos_settings; ran=1 ;;
+        ddcutil)          check_ddcutil;          ran=1 ;;
+    esac
+done
+
+(( ran )) || exit 0
+(( ${#findings[@]} )) || exit 0
+
+{
+    echo
+    echo "${bold}== hyperBox post-upgrade verification ==${rst}"
+    printf '%s\n' "${findings[@]}"
+    echo "  ${dim}re-run anytime: hw-verify --all${rst}"
+    echo
+} >&2
+exit 0
